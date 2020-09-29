@@ -1,3 +1,6 @@
+# Script to generate MQTT updates on OBS status
+# SPDX-License-Identifier: AGPL-3.0
+
 import json
 import socket # Just so we can properly handle hostname exceptions
 import obspython as obs
