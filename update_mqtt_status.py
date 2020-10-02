@@ -9,8 +9,8 @@ import paho.mqtt.client as mqtt
 
 
 # Meta
-__version__ = '1.0.1'
-__version_info__ = (1, 0, 1)
+__version__ = '1.0.2'
+__version_info__ = (1, 0, 2)
 __license__ = "AGPLv3" # ...or proprietary if you want to negotiate
 __license_info__ = {
     "AGPLv3": {
@@ -21,7 +21,7 @@ __license_info__ = {
         "license_format": "1.0",
     }
 }
-__author__ = 'Riskable <riskable@youknowwhat.com>'
+__author__ = 'Riskable <riskable@youknowwhat.com>, Grant Likely <grant.likely@secretlab.ca>'
 
 __doc__ = """\
 Publishes real-time OBS status info to the given MQTT server/port/channel \
@@ -46,6 +46,8 @@ STATUS = {
     "lagged_frames": 0,
 }
 PREV_STATUS = STATUS.copy()
+
+TALLY_STATUS = {}
 
 # Using a global MQTT client variable to keep things simple:
 CLIENT = mqtt.Client()
@@ -103,6 +105,32 @@ def update_status():
         CLIENT.publish(MQTT_CHANNEL, json.dumps(STATUS))
     PREV_STATUS = STATUS.copy()
 
+def on_frontend_event(event):
+    global TALLY_STATUS
+
+    if event in (obs.OBS_FRONTEND_EVENT_SCENE_CHANGED,
+                 obs.OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED):
+        # Check the status of the tally sources
+        program_source = obs.obs_frontend_get_current_scene()
+        preview_source = obs.obs_frontend_get_current_preview_scene()
+        program_scene = obs.obs_scene_from_source(program_source)
+        preview_scene = obs.obs_scene_from_source(preview_source)
+        try:
+            for source_name in TALLY_STATUS.keys():
+                color = "000000"
+                source = obs.obs_scene_find_source(preview_scene, source_name)
+                if source:
+                    color = "00ff00"
+                source = obs.obs_scene_find_source(program_scene, source_name)
+                if source:
+                    color = "ff0000"
+                if TALLY_STATUS[source_name] != color:
+                    CLIENT.publish("cmnd/%s/COLOR"%source_name, color)
+                    TALLY_STATUS[source_name] = color
+        finally:
+            obs.obs_source_release(program_source)
+            obs.obs_source_release(preview_source)
+
 def script_description():
     return __doc__ # We wrote a nice docstring...  Might as well use it!
 
@@ -111,6 +139,7 @@ def script_load(settings):
     Just prints a message indicating that the script was loaded successfully.
     """
     print("MQTT script loaded.")
+    obs.obs_frontend_add_event_callback(on_frontend_event)
 
 def script_unload():
     """
@@ -119,6 +148,7 @@ def script_unload():
     recording/streaming forever) and calls `CLIENT.disconnect()` (even though
     that's probably not necessary).
     """
+    global TALLY_STATUS
     final_status = {
         "recording": False,
         "streaming": False,
@@ -130,7 +160,10 @@ def script_unload():
         "lagged_frames": 0,
     }
     CLIENT.publish(MQTT_CHANNEL, json.dumps(final_status))
+    for source_name in TALLY_STATUS.keys():
+        CLIENT.publish("cmnd/%s/COLOR"%source_name, "000000")
     CLIENT.disconnect()
+
 
 def script_defaults(settings):
     """
@@ -155,6 +188,8 @@ def script_properties():
         props, "mqtt_port", "MQTT TCP/IP port", MQTT_PORT, 65535, 1)
     obs.obs_properties_add_int(
         props, "interval", "Update Interval (seconds)", 1, 3600, 1)
+    obs.obs_properties_add_editable_list(props, "tally_sources", "Tally Sources",
+                                    obs.OBS_EDITABLE_LIST_TYPE_STRINGS, "", "")
     return props
 
 def script_update(settings):
@@ -167,6 +202,17 @@ def script_update(settings):
     global MQTT_PORT
     global MQTT_CHANNEL
     global INTERVAL
+    global TALLY_STATUS
+
+    TALLY_STATUS = {}
+    data_array = obs.obs_data_get_array(settings, "tally_sources")
+    try:
+        for i in range(obs.obs_data_array_count(data_array)):
+            item = obs.obs_data_array_item(data_array, i)
+            TALLY_STATUS[obs.obs_data_get_string(item, 'value')] = "000000"
+    finally:
+        obs.obs_data_array_release(data_array)
+
     mqtt_host = obs.obs_data_get_string(settings, "mqtt_host")
     if mqtt_host != MQTT_HOST:
         MQTT_HOST = mqtt_host
