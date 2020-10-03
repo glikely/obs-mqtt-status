@@ -108,6 +108,10 @@ def update_status():
 def on_frontend_event(event):
     global TALLY_STATUS
 
+    CLIENT.loop()
+    if not CLIENT.is_connected():
+        return
+
     if event in (obs.OBS_FRONTEND_EVENT_SCENE_CHANGED,
                  obs.OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED):
         # Check the status of the tally sources
@@ -159,10 +163,11 @@ def script_unload():
         "frames": 0,
         "lagged_frames": 0,
     }
-    CLIENT.publish(MQTT_CHANNEL, json.dumps(final_status))
-    for source_name in TALLY_STATUS.keys():
-        CLIENT.publish("cmnd/%s/COLOR"%source_name, "000000")
-    CLIENT.disconnect()
+    if CLIENT.is_connected():
+        CLIENT.publish(MQTT_CHANNEL, json.dumps(final_status))
+        for source_name in TALLY_STATUS.keys():
+            CLIENT.publish("cmnd/%s/COLOR"%source_name, "000000")
+        CLIENT.disconnect()
 
 
 def script_defaults(settings):
