@@ -123,7 +123,8 @@ def on_frontend_event(event):
                 if source:
                     color = "ff0000"
                 if TALLY_STATUS[source_name] != color:
-                    CLIENT.publish("cmnd/%s/COLOR"%source_name, color)
+                    CLIENT.publish("cmnd/%s/COLOR" % source_name, color)
+                    CLIENT.publish("wled/%s/col" % source_name, '#'+color) # add WLED support
                     TALLY_STATUS[source_name] = color
         finally:
             obs.obs_source_release(program_source)

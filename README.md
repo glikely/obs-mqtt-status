@@ -28,6 +28,8 @@ Note: MQTT topics should only contain ASCII alphanumeric characters.
 Do not use spaces and avoid special characters.
 Your source name must exactly match the topic used by the Tasmota device.
 
+Tally with WLED change Settings/Sync Settings/MQTT Device Topic: wled/[Name].
+
 Installation
 ------------
 
